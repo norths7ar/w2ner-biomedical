@@ -27,11 +27,12 @@ in the preprocessing and orchestration layer.
 w2ner-biomedical/
 ├── configs/
 │   └── biored_base.json        # Architecture + optimiser hyperparameters only.
-│                               # Vocabulary (entity_types, label_num) is NOT here.
+│                               # Vocabulary (entity_types, label_num) is injected by step04.
 ├── specs/
 │   ├── label_spec.json         # Authoritative entity type vocabulary. Edit deliberately.
-│   └── schemas.py              # Pydantic stage-boundary schemas.
+│   └── schemas.py              # Pydantic stage-boundary schemas (IngestRecord → PostprocessRecord).
 ├── pipeline/
+│   ├── _utils.py               # Shared helpers: file_sha256, write_stage_manifest, build_base_parser.
 │   ├── step01_ingest.py        # Unicode normalise; emit IngestRecord JSONL.
 │   ├── step02_tokenize.py      # Sentence-split + word-tokenise + subword-chunk (merged).
 │   ├── step03_add_labels.py    # Align annotations to sentence chunks; populate ner field.
@@ -39,6 +40,7 @@ w2ner-biomedical/
 │   ├── step05_predict.py       # Inference: encode + forward pass + decode_grid.
 │   └── step06_postprocess.py   # Char span recovery + majority-vote type normalisation.
 ├── model/
+│   ├── constants.py            # Shared numeric constants: NNW_LABEL, CLS_OFFSET, DIST_DIAGONAL.
 │   ├── ner_model.py            # W2NER neural architecture.
 │   ├── trainer.py              # Training loop, loss, validation, early stopping.
 │   ├── decoding.py             # Grid → entity span decoder.
@@ -49,16 +51,16 @@ w2ner-biomedical/
 ├── guards/
 │   └── validators.py           # Five explicit pipeline guards.
 ├── converters/
-│   ├── bc5cdr_to_schema.py     # BC5CDR BioC XML → IngestRecord JSON.
-│   ├── biored_to_schema.py     # BioRED BioC XML → IngestRecord JSON (incl. discontinuous).
+│   ├── bc5cdr_to_schema.py     # BC5CDR BioC XML → annotation JSON.
+│   ├── biored_to_schema.py     # BioRED BioC XML → annotation JSON (incl. discontinuous).
 │   └── README.md               # Corpus format notes and usage examples.
 ├── scripts/
-│   ├── run_train.sh
-│   ├── run_predict.sh
-│   └── run_cv.sh
+│   ├── run_train.sh            # Steps 1→2→3→4→train.
+│   ├── run_predict.sh          # Steps 1→2→5→6 (no labels required).
+│   └── run_cv.sh               # K-fold loop over run_train.sh + run_predict.sh.
 ├── tests/
 │   └── test_roundtrip.py       # Encode→decode round-trip tests.
-├── pyproject.toml              # pip install -e . for cross-script imports.
+├── pyproject.toml              # pip install -e . for intra-package imports.
 └── README.md
 ```
 
@@ -128,7 +130,20 @@ written.
 | `check_id_join_completeness` | Missing prediction records in postprocessing join |
 | `check_label_vocab_consistency` | Model head / label2id dimension mismatch at load time |
 
-### 6. Dependency direction: model/ never imports from pipeline/
+### 6. Shared constants in model/constants.py
+
+`NNW_LABEL`, `CLS_OFFSET`, and `DIST_DIAGONAL` were previously duplicated
+across `feature_builder.py`, `step02_tokenize.py`, `decoding.py`, and
+`train.py`. All four now import from `model/constants.py`.
+
+### 7. Shared pipeline utilities in pipeline/_utils.py
+
+`file_sha256`, `write_stage_manifest`, and `build_base_parser` were previously
+re-implemented per step. All six pipeline steps now import from `pipeline/_utils.py`.
+`build_base_parser` provides the common `--output-dir` (required) and `--force`
+arguments so each step script only declares its own specific arguments.
+
+### 8. Dependency direction: model/ never imports from pipeline/
 
 The `model/` layer (ner_model, trainer, decoding, train) has no imports from
 `pipeline/` or `guards/`. The dependency graph flows strictly:
@@ -181,24 +196,50 @@ codebase. Each is tagged in the relevant file's header comment with its priority
 
 ## Running the pipeline
 
+Install the package first so that intra-package imports resolve correctly:
+
 ```bash
-# Training
-bash scripts/run_train.sh \
-  --model-name biored_base \
-  --input-dir  /path/to/annotations \
-  --val-dir    /path/to/val_annotations
-
-# Inference
-bash scripts/run_predict.sh \
-  --model-name biored_base \
-  --input-dir  /path/to/new_documents
-
-# Cross-validation (5-fold)
-bash scripts/run_cv.sh \
-  --folds    5 \
-  --cv-dir   /path/to/cv_splits \
-  --output-dir /path/to/cv_results
+pip install -e .
 ```
+
+**Training** (steps 1 → 2 → 3 → 4 → train):
+
+```bash
+bash scripts/run_train.sh \
+  --bert-name  dmis-lab/biobert-base-cased-v1.1 \
+  --config     configs/biored_base.json \
+  --spec       specs/label_spec.json \
+  --model-suffix _biored \
+  --input-dir  /path/to/train_annotations \
+  --val-dir    /path/to/val_annotations \
+  --output-dir models/biored_base
+```
+
+**Inference** (steps 1 → 2 → 5 → 6, no gold labels required):
+
+```bash
+bash scripts/run_predict.sh \
+  --bert-name  dmis-lab/biobert-base-cased-v1.1 \
+  --config     configs/biored_base.json \
+  --model-dir  models/biored_base \
+  --input-dir  /path/to/documents \
+  --output-dir data/predictions
+```
+
+**Cross-validation** (K-fold loop over train + predict):
+
+```bash
+bash scripts/run_cv.sh \
+  --folds       5 \
+  --bert-name   dmis-lab/biobert-base-cased-v1.1 \
+  --config      configs/biored_base.json \
+  --model-suffix _biored \
+  --cv-dir      /path/to/cv_splits \
+  --output-dir  data/cv_results
+```
+
+All scripts accept the same flags as environment variables
+(`BERT_NAME`, `CONFIG`, `MODEL_DIR`, etc.) so they compose cleanly in CI.
 
 ---
 
