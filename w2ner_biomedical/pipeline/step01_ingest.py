@@ -40,19 +40,18 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 import os
 import tempfile
 import unicodedata
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 
 from myutils import load_json, save_jsonl, get_logger
 
-from ..specs.schemas import IngestRecord, StageManifest
+from ..specs.schemas import IngestRecord
 from ..guards.validators import check_record_count_parity
+from ._utils import file_sha256, write_stage_manifest, build_base_parser
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -186,36 +185,6 @@ def ingest_file(input_path: Path, deleted_pmids: set[str]) -> list[IngestRecord]
     return records
 
 
-def _file_sha256(path: Path) -> str:
-    """Return the hex SHA-256 digest of a file's contents."""
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def write_manifest(
-    output_path: Path,
-    input_files: list[str],
-    input_hash: str,
-    record_count: int,
-    stage: str,
-) -> None:
-    """Write a StageManifest sidecar as {output_path}.meta.json."""
-    manifest = StageManifest(
-        stage=stage,
-        input_files=input_files,
-        input_hash=input_hash,
-        record_count=record_count,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    manifest_path = output_path.with_suffix(output_path.suffix + ".meta.json")
-    manifest_path.write_text(
-        manifest.model_dump_json(indent=2), encoding="utf-8"
-    )
-
-
 def _process_one_file(
     input_path: Path,
     output_dir: Path,
@@ -251,13 +220,13 @@ def _process_one_file(
             pass
         raise
 
-    input_hash = _file_sha256(input_path)
-    write_manifest(
+    input_hash = file_sha256(input_path)
+    write_stage_manifest(
         output_path=output_path,
+        stage="step01_ingest",
         input_files=[input_path.name],
         input_hash=input_hash,
         record_count=len(records),
-        stage="step01_ingest",
     )
 
     LOGGER.info("Wrote %d records -> %s", len(records), output_path.name)
@@ -267,16 +236,10 @@ def _process_one_file(
 def main() -> None:
     global LOGGER
 
-    parser = argparse.ArgumentParser(
-        description="Step 01: ingest annotation JSON files into IngestRecord JSONL."
-    )
+    parser = build_base_parser("Step 01: ingest annotation JSON files into IngestRecord JSONL.")
     parser.add_argument(
         "--input-dir", required=True,
         help="Directory containing raw annotation *.json files.",
-    )
-    parser.add_argument(
-        "--output-dir", required=True,
-        help="Directory to write IngestRecord *.jsonl files.",
     )
     parser.add_argument(
         "--deleted-pmids", default=None,

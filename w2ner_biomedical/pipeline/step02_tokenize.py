@@ -52,21 +52,15 @@ import logging
 import os
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime, timezone
 from pathlib import Path
 
 import regex
 
 from myutils import load_jsonl, save_jsonl, get_logger
 
-from ..specs.schemas import IngestRecord, TokenRecord, StageManifest
+from ..specs.schemas import IngestRecord, TokenRecord
 from ..guards.validators import check_record_count_parity
-
-# CLS_OFFSET: [CLS] occupies position 0 in bert_input, so all subword piece
-# positions are shifted right by 1 when building the pieces2word matrix.
-# Defined here so step02 and data/feature_builder share the same documented
-# constant rather than independent magic +1 values.
-CLS_OFFSET: int = 1
+from ._utils import file_sha256, write_stage_manifest, build_base_parser
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -313,23 +307,6 @@ def tokenize_document(
 # File-level processing and manifest writing
 # ---------------------------------------------------------------------------
 
-def _write_manifest(
-    output_path: Path,
-    input_files: list[str],
-    input_hash: str,
-    record_count: int,
-) -> None:
-    manifest = StageManifest(
-        stage="step02_tokenize",
-        input_files=input_files,
-        input_hash=input_hash,
-        record_count=record_count,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    manifest_path = output_path.with_suffix(output_path.suffix + ".meta.json")
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-
 def _process_file(
     input_path: Path,
     output_dir: Path,
@@ -390,9 +367,6 @@ def _process_file(
     # but documents the pipeline intent.
     check_record_count_parity(prev_count, len(token_record_dicts), "step02_tokenize")
 
-    # Compute input hash
-    h = hashlib.sha256(input_path.read_bytes()).hexdigest()
-
     # Write atomically
     tmp_fd, tmp_path_str = tempfile.mkstemp(dir=output_dir, suffix=".jsonl.tmp")
     try:
@@ -406,10 +380,11 @@ def _process_file(
             pass
         raise
 
-    _write_manifest(
+    write_stage_manifest(
         output_path=output_path,
+        stage="step02_tokenize",
         input_files=[input_path.name],
-        input_hash=h,
+        input_hash=file_sha256(input_path),
         record_count=len(token_record_dicts),
     )
 
@@ -423,16 +398,10 @@ def _process_file(
 def main() -> None:
     global LOGGER
 
-    parser = argparse.ArgumentParser(
-        description="Step 02: tokenize IngestRecord JSONL into TokenRecord JSONL."
-    )
+    parser = build_base_parser("Step 02: tokenize IngestRecord JSONL into TokenRecord JSONL.")
     parser.add_argument(
         "--input-dir", required=True,
         help="Directory containing step01 IngestRecord *.jsonl files.",
-    )
-    parser.add_argument(
-        "--output-dir", required=True,
-        help="Directory to write TokenRecord *.jsonl files.",
     )
     parser.add_argument(
         "--bert-name", required=True,
@@ -446,10 +415,6 @@ def main() -> None:
     parser.add_argument(
         "--max-length", type=int, default=500,
         help="Maximum subword token count per chunk including CLS+SEP (default: 500).",
-    )
-    parser.add_argument(
-        "--force", action="store_true",
-        help="Overwrite existing output files.",
     )
     parser.add_argument(
         "--workers", type=int, default=1,

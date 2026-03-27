@@ -46,12 +46,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -61,7 +59,8 @@ from transformers import AutoTokenizer, AutoModel
 
 from myutils import load_json, load_jsonl, save_jsonl, get_logger
 
-from ..specs.schemas import TokenRecord, PredictRecord, PredictedEntity, StageManifest
+from ..specs.schemas import TokenRecord, PredictRecord, PredictedEntity
+from ._utils import file_sha256, write_stage_manifest, build_base_parser
 from ..model.model_config import ModelConfig
 from ..model.ner_model import NERModel
 from ..model.decoding import decode_grid
@@ -216,39 +215,13 @@ def _write_output(records: list[dict], output_path: Path) -> None:
         raise
 
 
-def _file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _write_manifest(output_path: Path, input_files: list[str], input_hash: str, record_count: int) -> None:
-    manifest = StageManifest(
-        stage="step05_predict",
-        input_files=input_files,
-        input_hash=input_hash,
-        record_count=record_count,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    manifest_path = output_path.with_suffix(output_path.suffix + ".meta.json")
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-
 def main() -> None:
     global LOGGER
 
-    parser = argparse.ArgumentParser(
-        description="Step 05: run W2NER inference over step03 TokenRecord JSONL."
-    )
+    parser = build_base_parser("Step 05: run W2NER inference over step03 TokenRecord JSONL.")
     parser.add_argument(
         "--input-dir", required=True,
         help="Directory containing step03 labelled TokenRecord *.jsonl files.",
-    )
-    parser.add_argument(
-        "--output-dir", required=True,
-        help="Directory to write PredictRecord *.jsonl files.",
     )
     parser.add_argument(
         "--config", required=True,
@@ -273,10 +246,6 @@ def main() -> None:
     parser.add_argument(
         "--device", default=None,
         help="Device string, e.g. 'cuda:0' or 'cpu'. Auto-detected if omitted.",
-    )
-    parser.add_argument(
-        "--force", action="store_true",
-        help="Overwrite existing output files.",
     )
     args = parser.parse_args()
 
@@ -356,11 +325,11 @@ def main() -> None:
                 prev_count = prev_data.get("record_count")
             check_record_count_parity(prev_count, n, "step05_predict")
 
-            input_hash = _file_sha256(input_file)
-            _write_manifest(
+            write_stage_manifest(
                 output_path=output_file,
+                stage="step05_predict",
                 input_files=[input_file.name],
-                input_hash=input_hash,
+                input_hash=file_sha256(input_file),
                 record_count=n,
             )
             total_records += n

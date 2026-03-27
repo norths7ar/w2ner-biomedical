@@ -45,21 +45,20 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import os
 import tempfile
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
 from myutils import load_json, load_jsonl, save_jsonl, get_logger
 
 from ..specs.schemas import (
-    TokenRecord, PredictRecord, PostprocessRecord, RefinedEntity, StageManifest,
+    TokenRecord, PredictRecord, PostprocessRecord, RefinedEntity,
 )
 from ..guards.validators import check_record_count_parity, check_id_join_completeness
+from ._utils import file_sha256, write_stage_manifest, build_base_parser
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -317,37 +316,10 @@ def postprocess_file(
     return len(postprocess_records)
 
 
-def _file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _write_manifest(
-    output_path: Path,
-    input_files: list[str],
-    input_hash: str,
-    record_count: int,
-) -> None:
-    manifest = StageManifest(
-        stage="step06_postprocess",
-        input_files=input_files,
-        input_hash=input_hash,
-        record_count=record_count,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    manifest_path = output_path.with_suffix(output_path.suffix + ".meta.json")
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-
 def main() -> None:
     global LOGGER
 
-    parser = argparse.ArgumentParser(
-        description="Step 06: join predictions with token spans and apply majority-vote type refinement."
-    )
+    parser = build_base_parser("Step 06: join predictions with token spans and apply majority-vote type refinement.")
     parser.add_argument(
         "--tokens-dir", required=True,
         help="Directory containing step03 TokenRecord *.jsonl files (for spans and pmid).",
@@ -359,14 +331,6 @@ def main() -> None:
     parser.add_argument(
         "--fulltext-dir", required=True,
         help="Directory containing step01 IngestRecord *.jsonl files (for fulltext strings).",
-    )
-    parser.add_argument(
-        "--output-dir", required=True,
-        help="Directory to write PostprocessRecord *.jsonl files.",
-    )
-    parser.add_argument(
-        "--force", action="store_true",
-        help="Overwrite existing output files.",
     )
     args = parser.parse_args()
 
@@ -423,11 +387,11 @@ def main() -> None:
                 total_skipped += 1
                 continue
 
-            input_hash = _file_sha256(token_file)
-            _write_manifest(
+            write_stage_manifest(
                 output_path=output_file,
+                stage="step06_postprocess",
                 input_files=[token_file.name, pred_file.name],
-                input_hash=input_hash,
+                input_hash=file_sha256(token_file),
                 record_count=n,
             )
             total_records += n

@@ -62,7 +62,7 @@ from transformers import AutoTokenizer, AutoModel
 from myutils import load_json, save_json, load_jsonl, get_logger
 
 from .model_config import ModelConfig
-from .decoding import NNW_LABEL
+from .constants import NNW_LABEL
 from .ner_model import NERModel
 from .trainer import Trainer, compute_class_weights
 from ..specs.schemas import LabelSpec

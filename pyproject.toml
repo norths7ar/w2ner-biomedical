@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "w2ner-biomedical"
+version = "0.1.0"
+description = "W2NER-based biomedical NER pipeline with explicit stage contracts and pipeline guards"
+requires-python = ">=3.12"
+dependencies = [
+    # Deep learning
+    "torch>=2.2",
+    "transformers>=4.40",
+    # NLP utilities
+    "spacy>=3.7",
+    "regex>=2024.1",
+    # Schema validation
+    "pydantic>=2.6",
+    # Scientific computing
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "pandas>=2.2",
+    # BioC format parsing (BC5CDR, BioRED converters)
+    "bioc>=2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["w2ner_biomedical"]
+
+[tool.hatch.build.targets.editable]
+packages = ["w2ner_biomedical"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true

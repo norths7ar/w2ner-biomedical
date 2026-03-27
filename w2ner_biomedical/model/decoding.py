@@ -52,9 +52,7 @@ from typing import NamedTuple
 import numpy as np
 
 
-# NNW label ID — must match label2id["<suc>"] == 1.
-# Named constant to avoid magic-number scatter across the codebase.
-NNW_LABEL: int = 1
+from .constants import NNW_LABEL  # noqa: F401  re-exported for callers that import from here
 
 
 @dataclass

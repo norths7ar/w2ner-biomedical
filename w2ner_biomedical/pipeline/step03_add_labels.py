@@ -56,19 +56,18 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import os
 import tempfile
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 
 from myutils import load_json, load_jsonl, save_jsonl, get_logger
 
-from ..specs.schemas import TokenRecord, NEREntry, SubSpan, LabelSpec, StageManifest
+from ..specs.schemas import TokenRecord, NEREntry, SubSpan, LabelSpec
 from ..guards.validators import check_entity_alignment_rate, check_record_count_parity
+from ._utils import file_sha256, write_stage_manifest, build_base_parser
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -240,31 +239,6 @@ def assign_labels_to_document(
 # File-level processing and manifest writing
 # ---------------------------------------------------------------------------
 
-def _file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _write_manifest(
-    output_path: Path,
-    input_files: list[str],
-    input_hash: str,
-    record_count: int,
-) -> None:
-    manifest = StageManifest(
-        stage="step03_add_labels",
-        input_files=input_files,
-        input_hash=input_hash,
-        record_count=record_count,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    manifest_path = output_path.with_suffix(output_path.suffix + ".meta.json")
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-
 def process_file(
     annotation_path: Path,
     tokens_path: Path,
@@ -339,11 +313,11 @@ def process_file(
             pass
         raise
 
-    input_hash = _file_sha256(annotation_path)
-    _write_manifest(
+    write_stage_manifest(
         output_path=output_path,
+        stage="step03_add_labels",
         input_files=[annotation_path.name, tokens_path.name],
-        input_hash=input_hash,
+        input_hash=file_sha256(annotation_path),
         record_count=len(all_updated),
     )
 
@@ -358,9 +332,7 @@ def process_file(
 def main() -> None:
     global LOGGER
 
-    parser = argparse.ArgumentParser(
-        description="Step 03: assign annotation labels to TokenRecord JSONL."
-    )
+    parser = build_base_parser("Step 03: assign annotation labels to TokenRecord JSONL.")
     parser.add_argument(
         "--input-dir", required=True,
         help="Directory containing raw annotation *.json files.",
@@ -370,10 +342,6 @@ def main() -> None:
         help="Directory containing step02 TokenRecord *.jsonl files.",
     )
     parser.add_argument(
-        "--output-dir", required=True,
-        help="Directory to write labelled TokenRecord *.jsonl files.",
-    )
-    parser.add_argument(
         "--spec", required=True,
         help="Path to label_spec.json (LabelSpec).",
     )
@@ -381,10 +349,6 @@ def main() -> None:
         "--model-suffix", default=None,
         help="Model filter key in spec.model_filters (e.g. '_bc5cdr', '_biored'). "
              "If omitted, all entity types are included.",
-    )
-    parser.add_argument(
-        "--force", action="store_true",
-        help="Overwrite existing output files.",
     )
     args = parser.parse_args()
 

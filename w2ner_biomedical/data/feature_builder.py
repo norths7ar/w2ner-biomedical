@@ -63,19 +63,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from ..model.decoding import NNW_LABEL
-
-# CLS_OFFSET: the [CLS] token occupies position 0 in bert_input, so all
-# subword piece positions must be shifted right by 1 when building the
-# pieces2word alignment matrix.  This offset is also referenced by
-# step02_tokenize.py to keep the two modules in sync.
-CLS_OFFSET: int = 1
-
-# DIST_DIAGONAL: sentinel index assigned to same-word cells (i == j).
-# After log2-bucketing, diagonal cells have raw value 0 (dis2idx[0] = 0).
-# We remap 0 → 19 to give the diagonal a distinct embedding bucket rather
-# than sharing bucket 0 with uninitialised / padding cells.
-DIST_DIAGONAL: int = 19
+from ..model.constants import NNW_LABEL, CLS_OFFSET, DIST_DIAGONAL
 
 
 def build_dis2idx(max_distance: int = 1000) -> dict[int, int]:
@@ -86,17 +74,17 @@ def build_dis2idx(max_distance: int = 1000) -> dict[int, int]:
 
         0        → 0  (diagonal placeholder, remapped to DIST_DIAGONAL later)
         1        → 1
-        2–3      → 2
-        4–7      → 3
-        8–15     → 4
-        16–31    → 5
-        32–63    → 6
-        64–127   → 7
-        128–255  → 8
+        2-3      → 2
+        4-7      → 3
+        8-15     → 4
+        16-31    → 5
+        32-63    → 6
+        64-127   → 7
+        128-255  → 8
         256+     → 9
 
     Combined with the +9 offset applied to upper-triangle cells in
-    convert_instance, the full range of dist_inputs values is 1–19
+    convert_instance, the full range of dist_inputs values is 1-19
     (diagonal becomes 19 via DIST_DIAGONAL substitution).  The model's
     dist_emb_size must therefore be ≥ 20.
     """
