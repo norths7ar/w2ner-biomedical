@@ -189,20 +189,6 @@ def count_label_distribution(
     return counts
 
 
-def build_dis2idx() -> np.ndarray:
-    """Build the distance-to-bucket index lookup array.
-
-    Buckets distances [0..19] linearly; beyond 20 uses log-bucketing.
-    Identical to the original implementation.
-    """
-    dis2idx = np.zeros(512, dtype=np.int64)
-    dis2idx[1] = 1
-    dis2idx[2:] = 2
-    for i in range(2, 512):
-        dis2idx[i] = min(int(np.log2(i)) + 3, 19)
-    return dis2idx
-
-
 def main() -> None:
     import argparse
 
@@ -267,7 +253,7 @@ def main() -> None:
     LOGGER.info("Class weights: %s", {id2label[i]: f"{w:.4f}" for i, w in enumerate(class_weights.tolist())})
 
     # --- Build DataLoaders ---
-    from ..data.feature_builder import make_feature_converter
+    from ..data.feature_builder import build_dis2idx, make_feature_converter
     from ..data.collate import NERDataset, make_ner_collate_fn
 
     dis2idx = build_dis2idx()
