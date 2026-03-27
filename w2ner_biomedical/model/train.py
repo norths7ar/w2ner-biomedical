@@ -49,7 +49,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
@@ -60,14 +59,19 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel
+from myutils import load_json, save_json, load_jsonl, get_logger
 
 from .model_config import ModelConfig
+from .decoding import NNW_LABEL
 from .ner_model import NERModel
 from .trainer import Trainer, compute_class_weights
 from ..specs.schemas import LabelSpec
 
 
-LOGGER = logging.getLogger(__name__)
+# Module-level fallback — no handlers attached.  main() replaces this with a
+# fully configured logger once output_dir is known, so all messages land in
+# output_dir/logs/train.log as well as stdout.
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 def set_seed(seed: int) -> None:
@@ -126,11 +130,7 @@ def load_training_data(input_dir: Path) -> list[dict]:
     records: list[dict] = []
     for file in sorted(input_dir.glob("*.jsonl")):
         LOGGER.info("Loading training data: %s", file.name)
-        with file.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    records.append(json.loads(line))
+        records.extend(load_jsonl(file))
     LOGGER.info("Total training instances: %d", len(records))
     return records
 
@@ -149,7 +149,6 @@ def count_label_distribution(
 
     Returns {label_id: count} for use by compute_class_weights().
     """
-    from ..data.feature_builder import NNW_LABEL  # avoid circular at module level
 
     counts: dict[int, int] = {i: 0 for i in range(num_labels)}
 
@@ -218,19 +217,20 @@ def main() -> None:
     parser.add_argument("--patience",   type=int, default=0, help="Early stopping patience (0=disabled)")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s — %(message)s",
-    )
+    # Resolve output_dir first so the logger can write train.log there.
+    # All subsequent LOGGER calls — including those inside helper functions
+    # that reference the module-level LOGGER — will use this configured instance.
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    global LOGGER
+    LOGGER = get_logger("train", log_dir=output_dir / "logs")
 
     # Silence tokenizer parallelism warnings
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # --- Load config and spec ---
-    with open(args.config, encoding="utf-8") as f:
-        config = ModelConfig.model_validate(json.load(f))
-    with open(args.spec, encoding="utf-8") as f:
-        spec = LabelSpec.model_validate(json.load(f))
+    config = ModelConfig.model_validate(load_json(Path(args.config)))
+    spec = LabelSpec.model_validate(load_json(Path(args.spec)))
 
     # Validate that config and spec agree on entity types
     # (spec is authoritative; config is derived by step04_finalize_config.py)
@@ -295,8 +295,6 @@ def main() -> None:
         )
 
     # --- Train ---
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     save_path = output_dir / "model.pt"
 
     trainer = Trainer(
@@ -316,9 +314,7 @@ def main() -> None:
     )
 
     # --- Save artifacts ---
-    # Save label2id.json
-    with open(output_dir / "label2id.json", "w", encoding="utf-8") as f:
-        json.dump(label2id, f, ensure_ascii=False, indent=2)
+    save_json(label2id, output_dir / "label2id.json")
 
     # Save a copy of label_spec.json alongside the model so that
     # step05_predict.py can verify the vocabulary at load time.

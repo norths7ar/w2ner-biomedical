@@ -124,54 +124,39 @@ def compute_class_weights(
     return torch.FloatTensor(raw)
 
 
-def build_loss_mask(grid_mask2d: torch.Tensor) -> torch.Tensor:
-    """Combine grid_mask2d with the upper-triangle + non-zero-label constraint.
+def build_loss_mask(grid_mask2d: torch.Tensor, grid_labels: torch.Tensor) -> torch.Tensor:
+    """Build the boolean mask of cells to include in the training loss.
 
-    NNW edges (label=1) are only meaningful in the upper triangle (i < j).
-    THW edges (label > 1) sit on or below the diagonal.  Including
-    lower-triangle cells with label=0 in the loss wastes model capacity on
-    positions the decoder never reads.
+    W2NER grid layout (for an entity spanning words head..tail, head < tail):
+      - grid_labels[head, tail] = NNW_LABEL (1)   upper triangle (head < tail)
+      - grid_labels[tail, head] = type_id   (>1)  lower triangle (tail > head)
+      - all other cells          = 0               background
 
-    Strategy:
-      - Upper-triangle cells (i <= j): include if grid_mask2d is True.
-      - Lower-triangle cells (i > j): include ONLY if gold label > 0
-        (i.e. this is a THW cell, not a background cell).
-        In practice this is handled at loss-call time by letting the gold
-        labels be zero for those cells and trusting CrossEntropyLoss(ignore_index).
+    Three cell classes exist within grid_mask2d:
+      1. Upper-triangle NNW cells  (label = 1, head < tail) — always included
+      2. Lower-triangle THW cells  (label > 1, tail > head) — always included
+      3. Background cells          (label = 0, anywhere)   — included in upper
+                                                              triangle only
 
-    For simplicity this implementation returns the AND of grid_mask2d and
-    the upper triangle (diagonal inclusive).  THW cells are in the lower
-    triangle but the gold label there is non-zero, so they contribute to
-    the loss regardless of this mask when addressed via the upper-triangle
-    THW encoding (decoder reads instance[tail, head] which is below diagonal,
-    but the loss is computed over the full grid_mask2d — see note below).
-
-    NOTE: W2NER grid layout:
-      - grid_labels[head, tail] = NNW_LABEL (1)  for head < tail  (upper triangle)
-      - grid_labels[tail, head] = type_id (>1)   for head < tail  (lower triangle)
-    So THW gold labels ARE in the lower triangle.  This mask keeps both upper
-    triangle (NNW cells) AND lower triangle cells where gold label > 0 (THW).
+    Excluding lower-triangle background cells from the loss removes positions
+    that the decoder never reads for NNW decisions, preventing the model from
+    wasting capacity predicting label=0 in those structurally irrelevant cells.
     """
     B, L, _ = grid_mask2d.shape
     device = grid_mask2d.device
 
-    # Upper-triangle mask (includes diagonal): valid positions for NNW
-    upper = torch.triu(torch.ones(L, L, dtype=torch.bool, device=device))  # [L, L]
+    # Upper-triangle mask including diagonal — covers all NNW cells and
+    # upper-triangle background cells.
+    upper = torch.triu(
+        torch.ones(L, L, dtype=torch.bool, device=device)
+    ).unsqueeze(0).expand(B, -1, -1)                       # [B, L, L]
 
-    # Lower-triangle mask: positions where THW labels may appear
-    lower = ~upper   # [L, L]
+    # Lower-triangle cells: keep only those with a non-zero gold label
+    # (i.e. THW cells).  Pure background lower cells (label=0) are excluded.
+    lower = ~upper                                          # [B, L, L]
+    lower_nonzero = lower & (grid_labels > 0)
 
-    # Expand to batch dimension
-    upper = upper.unsqueeze(0).expand(B, -1, -1)   # [B, L, L]
-    lower = lower.unsqueeze(0).expand(B, -1, -1)   # [B, L, L]
-
-    # Include upper-triangle cells that are in the sentence (grid_mask2d)
-    # Include lower-triangle cells that are in the sentence — THW cells will
-    # have non-zero gold labels; pure background lower cells have label=0
-    # and will contribute zero gradient if we use ignore_index=-1 or simply
-    # by nature of CrossEntropyLoss predicting the correct 0 class anyway.
-    # The key win is excluding lower-triangle NNW=0 cells from penalisation.
-    return grid_mask2d & (upper | lower)
+    return grid_mask2d & (upper | lower_nonzero)
 
 
 class Trainer:
@@ -293,9 +278,10 @@ class Trainer:
             logits = self.model(bert_inputs, grid_mask2d, dist_inputs, pieces2word, sent_length)
 
             # [MEDIUM bug fix] Apply upper-triangle loss mask.
-            # The original masked only by grid_mask2d, which includes lower-
-            # triangle cells that the decoder never reads for NNW edges.
-            loss_mask = build_loss_mask(grid_mask2d)
+            # Pass grid_labels so build_loss_mask can distinguish THW cells
+            # (label > 0, lower triangle, keep) from background lower-triangle
+            # cells (label = 0, lower triangle, exclude).
+            loss_mask = build_loss_mask(grid_mask2d, grid_labels)
 
             # logits: [B, L, L, num_labels] → select masked cells → [N, num_labels]
             # grid_labels: [B, L, L] → [N]
