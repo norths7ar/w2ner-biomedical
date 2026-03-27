@@ -162,7 +162,7 @@ def predict_file(
         for batch in dataloader:
             bert_inputs, grid_mask2d, dist_inputs, pieces2word, sent_length, tokens_list = batch
 
-            bert_inputs = {k: v.to(device) for k, v in bert_inputs.items()}
+            bert_inputs = bert_inputs.to(device)
             grid_mask2d = grid_mask2d.to(device)
             dist_inputs = dist_inputs.to(device)
             pieces2word = pieces2word.to(device)

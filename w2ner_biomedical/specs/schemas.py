@@ -58,8 +58,12 @@ class IngestRecord(BaseModel):
 
     @model_validator(mode="after")
     def _fulltext_consistent(self) -> "IngestRecord":
-        # TODO: assert that self.fulltext == " ".join(filter(None,[title,abstract]))
-        ...
+        expected = " ".join(filter(None, [self.title, self.abstract]))
+        if self.fulltext != expected:
+            raise ValueError(
+                f"IngestRecord.fulltext is inconsistent with title+abstract. "
+                f"Expected {expected!r}, got {self.fulltext!r}."
+            )
         return self
 
 
@@ -197,8 +201,11 @@ class LabelSpec(BaseModel):
 
     @model_validator(mode="after")
     def _sentinels_fixed(self) -> "LabelSpec":
-        # TODO: assert self.sentinels == ["<pad>", "<suc>"]
-        ...
+        if self.sentinels != ["<pad>", "<suc>"]:
+            raise ValueError(
+                f"LabelSpec.sentinels must be exactly [\"<pad>\", \"<suc>\"], "
+                f"got {self.sentinels!r}."
+            )
         return self
 
     def label2id(self) -> dict[str, int]:
