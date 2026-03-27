@@ -12,9 +12,14 @@
     "VariantOrPolymorphism"
   ],
   "aliases": {
-    "ChemicalsAndDrugs": "Chemical",
-    "Gene":              "Gene_Or_GeneProduct",
-    "DNAMutation":       "DNA_Mutation"
+    "ChemicalsAndDrugs":        "Chemical",
+    "Gene":                     "Gene_Or_GeneProduct",
+    "DNAMutation":              "DNA_Mutation",
+    "ChemicalEntity":           "Chemical",
+    "DiseaseOrPhenotypicFeature": "Disease",
+    "GeneOrGeneProduct":        "Gene_Or_GeneProduct",
+    "OrganismTaxon":            "Species",
+    "SequenceVariant":          "VariantOrPolymorphism"
   },
   "model_filters": {
     "_bc5cdr": {

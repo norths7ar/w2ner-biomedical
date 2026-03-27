@@ -2,139 +2,67 @@
 # converters/bc5cdr_to_schema.py
 #
 # PURPOSE
-#   Convert a BC5CDR BioC corpus file (XML or JSON) into the IngestRecord
-#   JSON format expected by pipeline/step01_ingest.py.
+#   Convert a BC5CDR BioC corpus file (XML) into the annotation JSON format
+#   consumed by pipeline/step01_ingest.py.
 #
-# INPUT FORMAT — BC5CDR (BioC XML or BioC JSON)
-#   BC5CDR is distributed in BioC format via the BioCreative V shared task.
-#   The standard split files are:
-#     CDR_TrainingSet.BioC.xml
-#     CDR_DevelopmentSet.BioC.xml
-#     CDR_TestSet.BioC.xml
+# INPUT FORMAT — BC5CDR (BioC XML)
+#   Files: CDR_TrainingSet.BioC.xml, CDR_DevelopmentSet.BioC.xml,
+#          CDR_TestSet.BioC.xml
+#   Located under CDR_Data/CDR.Corpus.v010516/ in the standard distribution.
+#   Standard BioC structure: document-absolute annotation offsets, title at
+#   offset=0, single-space separator between title and abstract.
 #
-#   Document structure (same BioC schema as BioRED):
+#   Entity types in this corpus:
+#     Chemical  → Chemical
+#     Disease   → Disease
 #
-#     <collection>
-#       <document>
-#         <id>2339463</id>
-#         <passage>
-#           <infons><infon key="type">title</infon></infons>
-#           <offset>0</offset>
-#           <text>Sulindac-induced ...</text>
-#           <annotation id="T1">
-#             <infons>
-#               <infon key="type">Chemical</infon>
-#             </infons>
-#             <location offset="0" length="8"/>
-#             <text>Sulindac</text>
-#           </annotation>
-#         </passage>
-#         <passage>
-#           <infons><infon key="type">abstract</infon></infons>
-#           <offset>33</offset>
-#           <text>...</text>
-#           <annotation .../>
-#         </passage>
-#       </document>
-#     </collection>
+#   DISCONTINUOUS ENTITIES: BC5CDR contains 73 multi-location annotations
+#   in the training set (Disease entities with non-contiguous fragments,
+#   e.g. "Ocular ... toxicity").  Each location becomes a separate [start, end]
+#   entry in spans_list.  These are handled identically to BioRED multi-location
+#   annotations by step03_add_labels.py via its fragment-union logic.
 #
-#   ENTITY TYPES: BC5CDR contains only two entity types:
-#     "Chemical" → Chemical
-#     "Disease"  → Disease
-#   Both map directly to label_spec.json with no aliasing needed.
-#
-#   OFFSETS: Same convention as BioRED — annotation offsets are
-#   DOCUMENT-ABSOLUTE (relative to the start of the whole document,
-#   not the passage).  The same bioc_offset_to_fulltext_offset()
-#   logic applies.
-#
-#   NO DISCONTINUOUS ENTITIES: BC5CDR annotations always have exactly one
-#   <location> element per annotation.  The converter validates this
-#   assumption and raises if a multi-location annotation is encountered
-#   (to catch format changes across BC5CDR versions).
-#
-# OUTPUT FORMAT — same IngestRecord-compatible JSON array as biored_to_schema.py
+# OUTPUT FORMAT
 #   [
 #     {
-#       "PMID": "2339463",
-#       "articleTitle": "Sulindac-induced ...",
-#       "abstract": "...",
+#       "PMID": "227508",
+#       "articleTitle": "Naloxone reverses ...",
+#       "abstract": "In unanesthetized ...",
 #       "label": [
 #         [[[0, 8]], "Chemical"],
-#         [[[45, 60]], "Disease"]
+#         [[[49, 58]], "Chemical"],
+#         [[[0, 6], [20, 28]], "Disease"]   ← discontinuous
 #       ]
 #     },
 #     ...
 #   ]
 #
-# DIFFERENCES FROM biored_to_schema.py
-#   - Only two entity types (no mapping table needed, direct pass-through).
-#   - No discontinuous entities expected; converter validates this.
-#   - BC5CDR has a known issue in some versions where the abstract passage
-#     offset includes the title-terminating newline (`\n`) rather than a
-#     space.  The converter detects and handles this: if the separator
-#     character between title end and abstract start is `\n` rather than
-#     ` `, it is treated as a single character (same width) so no offset
-#     delta is introduced.  A WARNING is logged when this case is detected.
-#   - Some BC5CDR annotations span across the passage boundary (an
-#     annotation starts in the title and ends in the abstract).  These are
-#     extremely rare but present in the training set.  They are converted
-#     with a single span covering both passages and logged as INFO.
-#
 # USAGE
-#   python -m converters.bc5cdr_to_schema \
-#       --input  /path/to/CDR_TrainingSet.BioC.xml \
-#       --output /path/to/output/bc5cdr_train_converted.json
-#
-#   To convert all three splits:
 #   for split in Training Development Test; do
-#     python -m converters.bc5cdr_to_schema \
-#       --input  /path/CDR_${split}Set.BioC.xml \
-#       --output /path/bc5cdr_${split,,}_converted.json
+#     python -m w2ner_biomedical.converters.bc5cdr_to_schema \
+#       --input  data/CDR_Data/CDR.Corpus.v010516/CDR_${split}Set.BioC.xml \
+#       --output data/raw/bc5cdr_converted/${split,,}.json
 #   done
 # =============================================================================
 
 from __future__ import annotations
 
-# TODO: import json, logging
-# TODO: from pathlib import Path
-# TODO: import bioc
+import argparse
+import json
+import logging
+from pathlib import Path
 
-LOGGER = ...  # TODO: logging.getLogger(__name__)
+import bioc
 
-# BC5CDR entity types — both map directly, no aliasing required.
+from ._bioc_utils import validate_bioc_offsets, extract_passages, bioc_offset_to_fulltext_offset
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
+
+# BC5CDR corpus type → label_spec.json canonical type (direct 1:1 mapping)
 BC5CDR_TYPE_MAP: dict[str, str] = {
     "Chemical": "Chemical",
     "Disease":  "Disease",
 }
-
-
-def validate_bioc_offsets(document) -> None:
-    """Assert that the title passage starts at offset 0.
-
-    Same validation as biored_to_schema.py — BioC documents in BC5CDR also
-    use document-absolute offsets starting from 0 for the title.
-    """
-    # TODO: identical logic to biored_to_schema.validate_bioc_offsets
-    ...
-
-
-def detect_title_abstract_separator(document, title_text: str, abstract_bioc_offset: int) -> str:
-    """Detect the character(s) between the title and abstract in the BioC document.
-
-    BC5CDR sometimes uses '\n' as the separator; our fulltext always uses ' '.
-    Returns the detected separator string (1 or more characters).
-    Logs a WARNING if the separator is not a single space.
-    """
-    # TODO: separator_len = abstract_bioc_offset - len(title_text)
-    # TODO: if separator_len == 1 and separator == '\n':
-    #         LOGGER.warning("Document %s: BioC uses '\\n' as title-abstract separator "
-    #                        "(offset %d). Fulltext will use ' ' — offsets remain aligned "
-    #                        "because both separators are 1 character wide.", ...)
-    # TODO: elif separator_len != 1:
-    #         raise ValueError(f"Unexpected separator length {separator_len} in document ...")
-    # TODO: return separator
-    ...
 
 
 def convert_annotation(
@@ -144,75 +72,105 @@ def convert_annotation(
 ) -> tuple[list[list[int]], str] | None:
     """Convert one BioC annotation to a (spans_list, type_str) pair.
 
-    BC5CDR-specific: validates that each annotation has exactly one location.
-    Multi-location annotations indicate a format change and are rejected.
+    Returns None if the annotation type is not in BC5CDR_TYPE_MAP (logged
+    as WARNING) or if any location produces a degenerate span (start >= end).
+    Multi-location annotations (discontinuous entities) produce multiple
+    [start, end] entries in spans_list.
     """
-    # TODO: if len(ann.locations) != 1:
-    #         raise ValueError(f"BC5CDR annotation {ann.id} has {len(ann.locations)} locations "
-    #                          f"(expected 1). BC5CDR does not use discontinuous entities. "
-    #                          f"Check for format version differences.")
-    # TODO: raw_type = ann.infons.get("type", "")
-    # TODO: mapped_type = BC5CDR_TYPE_MAP.get(raw_type)
-    # TODO: if mapped_type is None:
-    #         LOGGER.warning("Unknown BC5CDR type %r — skipping", raw_type)
-    #         return None
-    # TODO: location = ann.locations[0]
-    # TODO: start = bioc_offset_to_fulltext_offset(location.offset, title_len, abstract_bioc_offset)
-    # TODO: end   = bioc_offset_to_fulltext_offset(location.offset + location.length,
-    #                                              title_len, abstract_bioc_offset)
-    # TODO: return ([[start, end]], mapped_type)
-    ...
+    raw_type = ann.infons.get("type", "")
+    mapped_type = BC5CDR_TYPE_MAP.get(raw_type)
+    if mapped_type is None:
+        LOGGER.warning("Unknown BC5CDR type %r in annotation %s — skipping.", raw_type, ann.id)
+        return None
 
+    spans_list: list[list[int]] = []
+    for loc in ann.locations:
+        start = bioc_offset_to_fulltext_offset(loc.offset, title_len, abstract_bioc_offset)
+        end = bioc_offset_to_fulltext_offset(loc.offset + loc.length, title_len, abstract_bioc_offset)
+        if start >= end:
+            LOGGER.warning(
+                "Annotation %s: degenerate span [%d, %d] after offset re-base — skipping annotation.",
+                ann.id, start, end,
+            )
+            return None
+        spans_list.append([start, end])
 
-def bioc_offset_to_fulltext_offset(
-    bioc_offset: int,
-    title_len: int,
-    abstract_bioc_offset: int,
-) -> int:
-    """Convert a BioC document-absolute offset to our fulltext-absolute offset.
-
-    Identical logic to biored_to_schema.bioc_offset_to_fulltext_offset.
-    Duplicated here rather than imported to keep converters self-contained
-    and independently deployable.
-
-    TODO: once both converters are stable, extract shared BioC utilities to
-    converters/_bioc_utils.py.
-    """
-    # TODO: if bioc_offset < abstract_bioc_offset:
-    #         return bioc_offset
-    # TODO: else:
-    #         pos_within_abstract = bioc_offset - abstract_bioc_offset
-    #         return (title_len + 1) + pos_within_abstract
-    ...
+    if not spans_list:
+        return None
+    return spans_list, mapped_type
 
 
 def convert_document(document) -> dict | None:
-    """Convert one BioC document to an IngestRecord-compatible dict."""
-    # TODO: validate_bioc_offsets(document)
-    # TODO: extract title, abstract, abstract_bioc_offset
-    # TODO: detect_title_abstract_separator (log if non-space)
-    # TODO: convert all annotations across both passages
-    # TODO: return {"PMID": ..., "articleTitle": ..., "abstract": ..., "label": [...]}
-    ...
+    """Convert one BioC document to an annotation-compatible dict.
 
-
-def convert_bc5cdr_file(input_path: ..., output_path: ...) -> int:  # type: ignore[name-defined]
-    """Convert a BC5CDR BioC file and write the output JSON array.
-
-    Returns the number of documents converted.
-    Supports both XML (.xml) and JSON (.json) BioC formats.
+    Returns None if the document cannot be converted (missing passages,
+    bad offsets).  Logs a WARNING and continues so a single bad document
+    does not abort the whole file.
     """
-    # TODO: use bioc.load() for XML or bioc.loads() for JSON
-    # TODO: convert each document
-    # TODO: write JSON array to output_path
-    # TODO: return count
-    ...
+    try:
+        validate_bioc_offsets(document)
+        title, abstract, abstract_bioc_offset = extract_passages(document)
+    except ValueError as exc:
+        LOGGER.warning("Skipping document %s: %s", document.id, exc)
+        return None
+
+    title_len = len(title)
+    labels: list[list] = []
+
+    for passage in document.passages:
+        for ann in passage.annotations:
+            result = convert_annotation(ann, title_len, abstract_bioc_offset)
+            if result is not None:
+                spans_list, mapped_type = result
+                labels.append([spans_list, mapped_type])
+
+    return {
+        "PMID": document.id,
+        "articleTitle": title,
+        "abstract": abstract,
+        "label": labels,
+    }
+
+
+def convert_bc5cdr_file(input_path: Path, output_path: Path) -> int:
+    """Convert a BC5CDR BioC-XML file and write the output JSON array.
+
+    Returns the number of documents successfully converted.
+    """
+    LOGGER.info("Loading %s ...", input_path)
+    with open(input_path, encoding="utf-8") as f:
+        collection = bioc.load(f)
+
+    records: list[dict] = []
+    for document in collection.documents:
+        rec = convert_document(document)
+        if rec is not None:
+            records.append(rec)
+
+    LOGGER.info(
+        "Converted %d / %d documents from %s.",
+        len(records), len(collection.documents), input_path.name,
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
+
+    LOGGER.info("Written to %s.", output_path)
+    return len(records)
 
 
 def main() -> None:
-    # TODO: argparse: --input, --output
-    # TODO: call convert_bc5cdr_file(args.input, args.output)
-    ...
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    parser = argparse.ArgumentParser(
+        description="Convert a BC5CDR BioC-XML file to annotation JSON."
+    )
+    parser.add_argument("--input", required=True, help="Path to BC5CDR BioC-XML file (e.g. CDR_TrainingSet.BioC.xml).")
+    parser.add_argument("--output", required=True, help="Path to write the output JSON array.")
+    args = parser.parse_args()
+
+    convert_bc5cdr_file(Path(args.input), Path(args.output))
 
 
 if __name__ == "__main__":
