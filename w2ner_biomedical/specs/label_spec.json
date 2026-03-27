@@ -1,0 +1,49 @@
+{
+  "_instructions": "This file is the single source of truth for entity types. To add support for a new dataset, run `python -m w2ner_biomedical.converters.inspect_dataset` to see what types it contains, then add any new types to entity_types (order matters — it determines label2id), add name aliases if needed, and define a model_filter for the dataset. Never derive entity_types at runtime from training data.",
+  "schema_version": "1",
+  "sentinels": ["<pad>", "<suc>"],
+  "entity_types": [
+    "Chemical",
+    "Disease",
+    "Gene_Or_GeneProduct",
+    "Species",
+    "CellLine",
+    "DNA_Mutation",
+    "VariantOrPolymorphism"
+  ],
+  "aliases": {
+    "ChemicalsAndDrugs": "Chemical",
+    "Gene":              "Gene_Or_GeneProduct",
+    "DNAMutation":       "DNA_Mutation"
+  },
+  "model_filters": {
+    "_bc5cdr": {
+      "include": ["Chemical", "Disease"],
+      "description": "BC5CDR dataset — chemicals and diseases only"
+    },
+    "_biored": {
+      "include": [
+        "Chemical",
+        "Disease",
+        "Gene_Or_GeneProduct",
+        "Species",
+        "CellLine",
+        "DNA_Mutation",
+        "VariantOrPolymorphism"
+      ],
+      "description": "BioRED dataset — full entity type set"
+    },
+    "_combined": {
+      "include": [
+        "Chemical",
+        "Disease",
+        "Gene_Or_GeneProduct",
+        "Species",
+        "CellLine",
+        "DNA_Mutation",
+        "VariantOrPolymorphism"
+      ],
+      "description": "BC5CDR + BioRED combined training"
+    }
+  }
+}
