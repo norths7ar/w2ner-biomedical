@@ -39,8 +39,11 @@ packages = ["w2ner_biomedical"]
 packages = ["w2ner_biomedical"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["w2ner_biomedical/tests"]
 python_files = ["test_*.py"]
+markers = [
+    "integration: tests that require real data files under data/ (skipped when absent)",
+]
 
 [tool.ruff]
 target-version = "py312"
