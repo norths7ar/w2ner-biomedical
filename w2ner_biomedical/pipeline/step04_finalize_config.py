@@ -31,14 +31,14 @@
 #     is passed.
 #
 #   - bert_hid_size in the config is validated against the actual hidden
-#     size reported by AutoConfig (config only — no weights are loaded).
+#     size reported by BertConfig (config only — no weights are loaded).
 #
 # BUGS ADDRESSED
 #   [MEDIUM]  Config clobbered by partial train05 run (Bug H):
 #             Eliminated — this step is separate and idempotent.
 #
 #   [MEDIUM]  bert_hid_size not validated against loaded model:
-#             validate_bert_hid_size loads AutoConfig (not weights) and
+#             validate_bert_hid_size loads BertConfig (not weights) and
 #             asserts hidden_size == config["bert_hid_size"].
 #
 #   [CRITICAL] Unknown types reaching label2id.get(type, 0):
@@ -106,10 +106,10 @@ def validate_bert_hid_size(config_dict: dict, cache_dir: str) -> None:
     Raises ValueError with a clear message if they disagree, before any
     training or prediction attempts are made.
     """
-    from transformers import AutoConfig
+    from transformers import BertConfig
 
     model_name = config_dict["bert_name"]
-    encoder_cfg = AutoConfig.from_pretrained(model_name, cache_dir=cache_dir)
+    encoder_cfg = BertConfig.from_pretrained(model_name, cache_dir=cache_dir)
     actual = encoder_cfg.hidden_size
     expected = config_dict["bert_hid_size"]
     if actual != expected:

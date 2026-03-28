@@ -100,11 +100,14 @@ Corpus files live under `data/` (gitignored). Expected paths:
 
 ---
 
-## Tokenizer
+## Tokenizer and config classes
 
 - Use `BertTokenizer` instead of `AutoTokenizer` for BioBERT.
   `AutoTokenizer` fails with a sentencepiece/protobuf conflict on this platform.
   Import: `from transformers import BertTokenizer`
+- Use `BertConfig` instead of `AutoConfig` for BioBERT.
+  `AutoConfig` raises `ValueError: Unrecognized model` because BioBERT's `config.json` lacks a `model_type` key.
+  Import: `from transformers import BertConfig`
 
 ---
 
