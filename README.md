@@ -154,6 +154,18 @@ The `model/` layer (ner_model, trainer, decoding, train) has no imports from
 
 ---
 
+## Benchmark results
+
+| Dataset | Backbone | Precision | Recall | F1 |
+|---------|----------|-----------|--------|----|
+| BioRED (test) | BioBERT-base-cased-v1.1 | 0.466 | 0.890 | 0.612 |
+
+Trained with `min_bg_weight=0.05`, `epochs=20`. 
+No hyperparameter search — these are baseline results.
+Published SOTA on BioRED with PubMedBERT: ~0.89 (Luo et al. 2022).
+
+---
+
 ## Known issues addressed
 
 The following bugs from the previous internal pipeline are addressed in this

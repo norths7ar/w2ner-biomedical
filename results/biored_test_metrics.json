@@ -1,0 +1,63 @@
+{
+  "overall": {
+    "precision": 0.4662,
+    "recall": 0.8902,
+    "f1": 0.6119,
+    "tp": 3147,
+    "fp": 3604,
+    "fn": 388
+  },
+  "per_type": {
+    "CellLine": {
+      "precision": 0.3937,
+      "recall": 1.0,
+      "f1": 0.565,
+      "tp": 50,
+      "fp": 77,
+      "fn": 0
+    },
+    "Chemical": {
+      "precision": 0.5625,
+      "recall": 0.8952,
+      "f1": 0.6909,
+      "tp": 675,
+      "fp": 525,
+      "fn": 79
+    },
+    "Disease": {
+      "precision": 0.4903,
+      "recall": 0.855,
+      "f1": 0.6232,
+      "tp": 784,
+      "fp": 815,
+      "fn": 133
+    },
+    "Gene_Or_GeneProduct": {
+      "precision": 0.5007,
+      "recall": 0.889,
+      "f1": 0.6406,
+      "tp": 1049,
+      "fp": 1046,
+      "fn": 131
+    },
+    "Species": {
+      "precision": 0.8012,
+      "recall": 0.9847,
+      "f1": 0.8836,
+      "tp": 387,
+      "fp": 96,
+      "fn": 6
+    },
+    "VariantOrPolymorphism": {
+      "precision": 0.162,
+      "recall": 0.8382,
+      "f1": 0.2715,
+      "tp": 202,
+      "fp": 1045,
+      "fn": 39
+    }
+  },
+  "n_documents": 100,
+  "n_gold_entities": 3535,
+  "n_pred_entities": 6751
+}
