@@ -8,18 +8,16 @@
     "Gene_Or_GeneProduct",
     "Species",
     "CellLine",
-    "DNA_Mutation",
     "VariantOrPolymorphism"
   ],
   "aliases": {
-    "ChemicalsAndDrugs":        "Chemical",
-    "Gene":                     "Gene_Or_GeneProduct",
-    "DNAMutation":              "DNA_Mutation",
-    "ChemicalEntity":           "Chemical",
+    "ChemicalsAndDrugs":          "Chemical",
+    "Gene":                       "Gene_Or_GeneProduct",
+    "ChemicalEntity":             "Chemical",
     "DiseaseOrPhenotypicFeature": "Disease",
-    "GeneOrGeneProduct":        "Gene_Or_GeneProduct",
-    "OrganismTaxon":            "Species",
-    "SequenceVariant":          "VariantOrPolymorphism"
+    "GeneOrGeneProduct":          "Gene_Or_GeneProduct",
+    "OrganismTaxon":              "Species",
+    "SequenceVariant":            "VariantOrPolymorphism"
   },
   "model_filters": {
     "_bc5cdr": {
@@ -33,10 +31,9 @@
         "Gene_Or_GeneProduct",
         "Species",
         "CellLine",
-        "DNA_Mutation",
         "VariantOrPolymorphism"
       ],
-      "description": "BioRED dataset — full entity type set"
+      "description": "BioRED dataset — 6 entity types"
     },
     "_combined": {
       "include": [
@@ -45,7 +42,6 @@
         "Gene_Or_GeneProduct",
         "Species",
         "CellLine",
-        "DNA_Mutation",
         "VariantOrPolymorphism"
       ],
       "description": "BC5CDR + BioRED combined training"
