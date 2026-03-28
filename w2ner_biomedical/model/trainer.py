@@ -469,7 +469,7 @@ class Trainer:
                 else:
                     self.patience_counter += 1
                     logger.info(
-                        "Epoch %d: entity-F1=%.4f (best=%.4f, patience=%d/%d)",
+                        "Epoch %d: entity-F1=%.4f (best=%.4f, patience=%d/%s)", # %s because %d cannot represent infinity when patience=0
                         epoch, val_f1, self.best_f1,
                         self.patience_counter, self.patience if self.patience > 0 else float("inf"),
                     )

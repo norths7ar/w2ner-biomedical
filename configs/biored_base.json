@@ -9,12 +9,16 @@
   "ffnn_hid_size": 288,
   "dist_emb_size": 20,
   "type_emb_size": 20,
-  "dilation": [1, 2, 3],
+  "dilation": [
+    1,
+    2,
+    3
+  ],
   "emb_dropout": 0.5,
   "conv_dropout": 0.5,
   "out_dropout": 0.33,
-  "learning_rate": 1e-3,
-  "bert_learning_rate": 5e-6,
+  "learning_rate": 0.001,
+  "bert_learning_rate": 5e-06,
   "weight_decay": 0.0,
   "warm_factor": 0.1,
   "clip_grad_norm": 5.0,
@@ -23,5 +27,14 @@
   "seed": 42,
   "save_path": null,
   "load_path": null,
-  "_TODO": "label_num and entity_types are intentionally absent. They are injected at training time from specs/label_spec.json by step04_finalize_config.py."
+  "_TODO": "label_num and entity_types are intentionally absent. They are injected at training time from specs/label_spec.json by step04_finalize_config.py.",
+  "entity_types": [
+    "Chemical",
+    "Disease",
+    "Gene_Or_GeneProduct",
+    "Species",
+    "CellLine",
+    "VariantOrPolymorphism"
+  ],
+  "label_num": 8
 }
