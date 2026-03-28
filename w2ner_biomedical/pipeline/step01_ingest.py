@@ -246,10 +246,6 @@ def main() -> None:
         help="Path to a file with one PMID per line to exclude (optional).",
     )
     parser.add_argument(
-        "--force", action="store_true",
-        help="Overwrite existing output files.",
-    )
-    parser.add_argument(
         "--workers", type=int, default=1,
         help="Number of parallel worker processes (default: 1).",
     )

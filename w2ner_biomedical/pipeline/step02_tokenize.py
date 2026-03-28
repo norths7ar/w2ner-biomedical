@@ -99,7 +99,7 @@ def _worker_init(bert_name: str, cache_dir: str) -> None:
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     _NLP = spacy.load(_SPACY_MODEL, enable=["senter"])
-    _TOKENIZER = AutoTokenizer.from_pretrained(bert_name, cache_dir=cache_dir)
+    _TOKENIZER = AutoTokenizer.from_pretrained(bert_name, cache_dir=cache_dir, use_fast=False)
 
 
 def _process_document_worker(record_dict: dict, max_length: int) -> list[dict]:
@@ -448,9 +448,7 @@ def main() -> None:
         import spacy
         from transformers import AutoTokenizer
         nlp = spacy.load(_SPACY_MODEL, enable=["senter"])
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.bert_name, cache_dir=args.cache_dir
-        )
+        tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=args.cache_dir, use_fast=False)
 
     total_chunks = 0
     total_skipped = 0
