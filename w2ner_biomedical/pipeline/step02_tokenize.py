@@ -95,11 +95,11 @@ def _worker_init(bert_name: str, cache_dir: str) -> None:
     """
     global _NLP, _TOKENIZER
     import spacy
-    from transformers import AutoTokenizer
+    from transformers import BertTokenizer
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     _NLP = spacy.load(_SPACY_MODEL, enable=["senter"])
-    _TOKENIZER = AutoTokenizer.from_pretrained(bert_name, cache_dir=cache_dir, use_fast=False)
+    _TOKENIZER = BertTokenizer.from_pretrained(bert_name, cache_dir=cache_dir)
 
 
 def _process_document_worker(record_dict: dict, max_length: int) -> list[dict]:
@@ -446,9 +446,9 @@ def main() -> None:
     tokenizer = None
     if args.workers == 1:
         import spacy
-        from transformers import AutoTokenizer
+        from transformers import BertTokenizer
         nlp = spacy.load(_SPACY_MODEL, enable=["senter"])
-        tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=args.cache_dir, use_fast=False)
+        tokenizer = BertTokenizer.from_pretrained(args.bert_name, cache_dir=args.cache_dir)
 
     total_chunks = 0
     total_skipped = 0

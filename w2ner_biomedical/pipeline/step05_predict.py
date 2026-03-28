@@ -55,7 +55,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoModel
+from transformers import BertTokenizer, AutoModel
 
 from myutils import load_json, load_jsonl, save_jsonl, get_logger
 
@@ -86,7 +86,7 @@ def load_model(
     Raises ValueError (via Guard 5) if model output head dimension does not
     match the label2id vocabulary loaded from model_dir.
     """
-    tokenizer = AutoTokenizer.from_pretrained(config.bert_name, cache_dir=cache_dir)
+    tokenizer = BertTokenizer.from_pretrained(config.bert_name, cache_dir=cache_dir)
 
     encoder = AutoModel.from_pretrained(
         config.bert_name,

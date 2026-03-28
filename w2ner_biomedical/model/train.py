@@ -58,7 +58,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoModel
+from transformers import BertTokenizer, AutoModel
 from myutils import load_json, save_json, load_jsonl, get_logger
 
 from .model_config import ModelConfig
@@ -238,7 +238,7 @@ def main() -> None:
 
     # --- Load encoder and model ---
     cache_dir = Path(args.cache_dir)
-    tokenizer = AutoTokenizer.from_pretrained(config.bert_name, cache_dir=str(cache_dir))
+    tokenizer = BertTokenizer.from_pretrained(config.bert_name, cache_dir=str(cache_dir))
     encoder = load_encoder(config, cache_dir).to(device)
     model = NERModel(config=config, encoder=encoder).to(device)
 

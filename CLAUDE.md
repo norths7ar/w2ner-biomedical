@@ -100,6 +100,14 @@ Corpus files live under `data/` (gitignored). Expected paths:
 
 ---
 
+## Tokenizer
+
+- Use `BertTokenizer` instead of `AutoTokenizer` for BioBERT.
+  `AutoTokenizer` fails with a sentencepiece/protobuf conflict on this platform.
+  Import: `from transformers import BertTokenizer`
+
+---
+
 ## Commit conventions
 
 - Stage only the files relevant to the change — never `git add -A`.
