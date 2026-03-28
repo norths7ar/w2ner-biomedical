@@ -249,7 +249,7 @@ def main() -> None:
 
     # --- Compute class weights to address ~68:1 imbalance ---
     label_counts = count_label_distribution(train_data, label2id, config.label_num)
-    class_weights = compute_class_weights(label_counts, config.label_num)
+    class_weights = compute_class_weights(label_counts, config.label_num, min_bg_weight=config.min_bg_weight)
     LOGGER.info("Class weights: %s", {id2label[i]: f"{w:.4f}" for i, w in enumerate(class_weights.tolist())})
 
     # --- Build DataLoaders ---

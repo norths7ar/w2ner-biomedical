@@ -79,6 +79,7 @@ class ModelConfig(BaseModel):
     # Training hyperparameters
     # -------------------------------------------------------------------------
     epochs: int
+    min_bg_weight: float = 0.0       # floor for background class weight (0.0 = disabled, use computed value)
     learning_rate: float             # non-BERT parameter learning rate
     bert_learning_rate: float        # BERT encoder learning rate (usually much smaller)
     weight_decay: float

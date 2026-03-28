@@ -88,23 +88,27 @@ def compute_class_weights(
     num_labels: int,
     bg_label: int = 0,
     max_bg_weight: float = 0.1,
+    min_bg_weight: float = 0.0,
 ) -> torch.Tensor:
     """Compute inverse-frequency class weights for CrossEntropyLoss.
 
     Weights are normalised so the mean entity-label weight is 1.0.  The
-    background label weight is then capped at max_bg_weight to prevent
-    numerical instability when the background count is orders of magnitude
-    larger than entity label counts.
+    background label weight is then clamped between min_bg_weight and
+    max_bg_weight.
 
-    At a ~68:1 ratio the uncapped background weight would be ~0.015.
-    max_bg_weight=0.1 provides a soft cap that keeps the background
-    gradient contribution small but non-zero.
+    After normalisation the background weight is typically very small
+    (~0.0002 on BioRED) because the background class dominates by several
+    orders of magnitude.  This causes near-zero loss on false positives and
+    leads to extremely high recall but poor precision.  min_bg_weight sets a
+    floor that forces the model to pay a meaningful penalty for predicting
+    entities in background cells.  0.0 disables the floor (legacy behaviour).
 
     Args:
-        label_counts: {label_id: count} from count_label_distribution().
-        num_labels:   Total number of labels (len(label2id)).
-        bg_label:     ID of the background / no-entity label (default 0).
+        label_counts:  {label_id: count} from count_label_distribution().
+        num_labels:    Total number of labels (len(label2id)).
+        bg_label:      ID of the background / no-entity label (default 0).
         max_bg_weight: Upper bound for the background label weight.
+        min_bg_weight: Lower bound for the background label weight (0.0 = disabled).
 
     Returns:
         Float tensor of shape [num_labels] for use as CrossEntropyLoss weight.
@@ -118,8 +122,8 @@ def compute_class_weights(
         mean_entity_weight = sum(entity_weights) / len(entity_weights)
         raw = [w / mean_entity_weight for w in raw]
 
-    # Cap the background label weight
-    raw[bg_label] = min(raw[bg_label], max_bg_weight)
+    # Clamp background weight between floor and ceiling
+    raw[bg_label] = max(min_bg_weight, min(raw[bg_label], max_bg_weight))
 
     return torch.FloatTensor(raw)
 
