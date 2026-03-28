@@ -269,10 +269,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Output dir is determined by output_config path; fall back to config's dir for logs
+    # Output dir is determined by output_config path.
+    # Logs go next to the step03 output dir so all pipeline logs share the same root.
     config_path = Path(args.config)
     output_path = Path(args.output_config) if args.output_config else config_path
-    log_dir = output_path.parent / "logs"
+    log_dir = Path(args.step03_dir).parent / "logs"
 
     LOGGER = get_logger("step04_finalize_config", log_dir=log_dir)
 
