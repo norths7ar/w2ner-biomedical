@@ -108,6 +108,8 @@ Corpus files live under `data/` (gitignored). Expected paths:
 - Use `BertConfig` instead of `AutoConfig` for BioBERT.
   `AutoConfig` raises `ValueError: Unrecognized model` because BioBERT's `config.json` lacks a `model_type` key.
   Import: `from transformers import BertConfig`
+- Use `BertModel` instead of `AutoModel` for BioBERT, same reason.
+  Import: `from transformers import BertModel`
 
 ---
 

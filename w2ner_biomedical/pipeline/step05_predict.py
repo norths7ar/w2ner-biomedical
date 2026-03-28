@@ -55,7 +55,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import BertTokenizer, AutoModel
+from transformers import BertTokenizer, BertModel
 
 from myutils import load_json, load_jsonl, save_jsonl, get_logger
 
@@ -88,7 +88,7 @@ def load_model(
     """
     tokenizer = BertTokenizer.from_pretrained(config.bert_name, cache_dir=cache_dir)
 
-    encoder = AutoModel.from_pretrained(
+    encoder = BertModel.from_pretrained(
         config.bert_name,
         cache_dir=cache_dir,
         output_hidden_states=config.use_bert_last_4_layers,

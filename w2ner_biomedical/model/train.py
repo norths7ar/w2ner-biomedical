@@ -58,7 +58,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import BertTokenizer, AutoModel
+from transformers import BertTokenizer, BertModel
 from myutils import load_json, save_json, load_jsonl, get_logger
 
 from .model_config import ModelConfig
@@ -118,7 +118,7 @@ def load_encoder(config: ModelConfig, cache_dir: Path) -> torch.nn.Module:
     In last-layer-only mode the hidden state stack is never read, so always
     requesting it wastes memory ([LOW] bug fix from ner_model.py).
     """
-    return AutoModel.from_pretrained(
+    return BertModel.from_pretrained(
         config.bert_name,
         cache_dir=str(cache_dir),
         output_hidden_states=config.use_bert_last_4_layers,

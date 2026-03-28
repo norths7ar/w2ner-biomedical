@@ -22,7 +22,7 @@
 #     batch-independent.
 #
 #   - output_hidden_states controlled by use_bert_last_4_layers:
-#     The original always passed output_hidden_states=True to AutoModel,
+#     The original always passed output_hidden_states=True to BertModel,
 #     even when use_bert_last_4_layers=False (last-layer-only mode).  In
 #     last-layer-only mode the hidden state stack is never read but is still
 #     computed and stored, wasting memory proportional to 4 × seq_len ×
@@ -276,7 +276,7 @@ class CoPredictor(nn.Module):
 class NERModel(nn.Module):
     """Full W2NER model.
 
-    The encoder (BioBERT or any HuggingFace AutoModel) must be provided by
+    The encoder (BioBERT, loaded via BertModel) must be provided by
     the caller — this class does not load from disk.  Keeping loading outside
     the model makes the class filesystem-independent and enables construction-
     time bert_hid_size validation.
