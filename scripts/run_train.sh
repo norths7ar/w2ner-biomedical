@@ -5,33 +5,28 @@
 # Full training pipeline: ingest → tokenize → add labels →
 #   finalize config → train model.
 #
+# Both training and validation data are run through steps 1-3 independently.
+# Intermediate outputs are kept under separate train/ and val/ subdirectories
+# inside --data-dir so the split is always identifiable from the directory tree.
+#
+# Folder layout produced under --data-dir:
+#   {data-dir}/
+#     train/
+#       step01_output/    ← IngestRecord JSONL for training split
+#       step02_output/    ← TokenRecord JSONL for training split
+#       step03_output/    ← TokenRecord+NER JSONL for training split
+#     val/                ← only created when --val-dir is supplied
+#       step01_output/
+#       step02_output/
+#       step03_output/
+#
 # Usage:
-#   ./scripts/run_train.sh [--model-name MODEL] [--bert-name HF_ID]
-#                          [--config configs/biored_base.json]
-#                          [--spec specs/label_spec.json]
-#                          [--model-suffix _biored]
-#                          [--input-dir /path/to/annotations]
-#                          [--val-dir /path/to/val_annotations]
-#                          [--data-dir data] [--output-dir models/biored_base]
-#                          [--cache-dir cache] [--workers 1]
-#                          [--force]
-#
-# Environment variables (all overridable via CLI flags above):
-#   MODEL_NAME   friendly name used to derive default output paths
-#   BERT_NAME    HuggingFace model id for subword tokeniser
-#   CONFIG       path to model config JSON template
-#   SPEC         path to label_spec.json
-#   MODEL_SUFFIX model_filters key in label_spec (e.g. _biored, _bc5cdr)
-#   INPUT_DIR    directory of raw annotation *.json files
-#   VAL_DIR      optional validation annotation directory
-#   DATA_DIR     root for intermediate step outputs
-#   OUTPUT_DIR   where model.pt, label2id.json and logs are written
-#   CACHE_DIR    HuggingFace model cache directory
-#   WORKERS      worker processes for step02 tokenization
-#   FORCE        set to --force to reprocess existing outputs
-#
-# Each step writes a .meta.json manifest alongside its JSONL output.
-# If a step fails, subsequent steps are not run (set -e).
+#   ./scripts/run_train.sh \
+#       --input-dir    data/raw/biored/train.json \
+#       --val-dir      data/raw/biored/dev.json \
+#       --data-dir     data/biored \
+#       --output-dir   models/biored_base \
+#       --model-suffix _biored
 # =============================================================================
 
 set -euo pipefail
@@ -67,52 +62,92 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Derived paths
-STEP01_DIR="${DATA_DIR}/step01_output"
-STEP02_DIR="${DATA_DIR}/step02_output"
-STEP03_DIR="${DATA_DIR}/step03_output"
+SUFFIX_ARG=""
+[ -n "$MODEL_SUFFIX" ] && SUFFIX_ARG="--model-suffix $MODEL_SUFFIX"
 
-echo "=== Step 1: Ingest ==="
+# Train split dirs
+TRAIN_STEP01="${DATA_DIR}/train/step01_output"
+TRAIN_STEP02="${DATA_DIR}/train/step02_output"
+TRAIN_STEP03="${DATA_DIR}/train/step03_output"
+
+# Val split dirs (only used when --val-dir is provided)
+VAL_STEP01="${DATA_DIR}/val/step01_output"
+VAL_STEP02="${DATA_DIR}/val/step02_output"
+VAL_STEP03="${DATA_DIR}/val/step03_output"
+
+# ── Training split: steps 1, 2, 3 ─────────────────────────────────────────
+
+echo "=== [Train] Step 1: Ingest ==="
 python -m w2ner_biomedical.pipeline.step01_ingest \
     --input-dir  "$INPUT_DIR" \
-    --output-dir "$STEP01_DIR" \
+    --output-dir "$TRAIN_STEP01" \
     $FORCE
 
-echo "=== Step 2: Tokenize ==="
+echo "=== [Train] Step 2: Tokenize ==="
 python -m w2ner_biomedical.pipeline.step02_tokenize \
-    --input-dir  "$STEP01_DIR" \
-    --output-dir "$STEP02_DIR" \
+    --input-dir  "$TRAIN_STEP01" \
+    --output-dir "$TRAIN_STEP02" \
     --bert-name  "$BERT_NAME" \
     --cache-dir  "$CACHE_DIR" \
     --workers    "$WORKERS" \
     $FORCE
 
-echo "=== Step 3: Add Labels ==="
-SUFFIX_ARG=""
-[ -n "$MODEL_SUFFIX" ] && SUFFIX_ARG="--model-suffix $MODEL_SUFFIX"
+echo "=== [Train] Step 3: Add Labels ==="
 python -m w2ner_biomedical.pipeline.step03_add_labels \
     --input-dir  "$INPUT_DIR" \
-    --tokens-dir "$STEP02_DIR" \
-    --output-dir "$STEP03_DIR" \
+    --tokens-dir "$TRAIN_STEP02" \
+    --output-dir "$TRAIN_STEP03" \
     --spec       "$SPEC" \
     $SUFFIX_ARG \
     $FORCE
+
+# ── Validation split: steps 1, 2, 3 (only if --val-dir provided) ──────────
+
+if [ -n "$VAL_DIR" ]; then
+    echo "=== [Val] Step 1: Ingest ==="
+    python -m w2ner_biomedical.pipeline.step01_ingest \
+        --input-dir  "$VAL_DIR" \
+        --output-dir "$VAL_STEP01" \
+        $FORCE
+
+    echo "=== [Val] Step 2: Tokenize ==="
+    python -m w2ner_biomedical.pipeline.step02_tokenize \
+        --input-dir  "$VAL_STEP01" \
+        --output-dir "$VAL_STEP02" \
+        --bert-name  "$BERT_NAME" \
+        --cache-dir  "$CACHE_DIR" \
+        --workers    "$WORKERS" \
+        $FORCE
+
+    echo "=== [Val] Step 3: Add Labels ==="
+    python -m w2ner_biomedical.pipeline.step03_add_labels \
+        --input-dir  "$VAL_DIR" \
+        --tokens-dir "$VAL_STEP02" \
+        --output-dir "$VAL_STEP03" \
+        --spec       "$SPEC" \
+        $SUFFIX_ARG \
+        $FORCE
+fi
+
+# ── Step 4: Finalize Config ────────────────────────────────────────────────
 
 echo "=== Step 4: Finalize Config ==="
 python -m w2ner_biomedical.pipeline.step04_finalize_config \
     --config     "$CONFIG" \
     --spec       "$SPEC" \
-    --step03-dir "$STEP03_DIR" \
+    --step03-dir "$TRAIN_STEP03" \
     --cache-dir  "$CACHE_DIR" \
     $SUFFIX_ARG
 
+# ── Step 5: Train ──────────────────────────────────────────────────────────
+
 echo "=== Step 5: Train ==="
 VAL_ARG=""
-[ -n "$VAL_DIR" ] && VAL_ARG="--val-dir $VAL_DIR"
+[ -n "$VAL_DIR" ] && VAL_ARG="--val-dir $VAL_STEP03"
 python -m w2ner_biomedical.model.train \
     --config     "$CONFIG" \
     --spec       "$SPEC" \
-    --input-dir  "$STEP03_DIR" \
+    --input-dir  "$TRAIN_STEP03" \
     --output-dir "$OUTPUT_DIR" \
     --cache-dir  "$CACHE_DIR" \
     $VAL_ARG
