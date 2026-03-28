@@ -265,7 +265,7 @@ def main() -> None:
         batch_size=config.batch_size,
         shuffle=True,
         collate_fn=make_ner_collate_fn(with_labels=True),
-        num_workers=4,
+        num_workers=0,
     )
 
     val_loader: DataLoader | None = None
@@ -277,7 +277,7 @@ def main() -> None:
             batch_size=config.batch_size,
             shuffle=False,
             collate_fn=make_ner_collate_fn(with_labels=True),
-            num_workers=4,
+            num_workers=0,
         )
 
     # --- Train ---

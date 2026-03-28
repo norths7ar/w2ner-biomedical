@@ -98,7 +98,7 @@ def _worker_init(bert_name: str, cache_dir: str) -> None:
     from transformers import BertTokenizer
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    _NLP = spacy.load(_SPACY_MODEL, enable=["senter"])
+    _NLP = spacy.load(_SPACY_MODEL)
     _TOKENIZER = BertTokenizer.from_pretrained(bert_name, cache_dir=cache_dir)
 
 
@@ -447,7 +447,7 @@ def main() -> None:
     if args.workers == 1:
         import spacy
         from transformers import BertTokenizer
-        nlp = spacy.load(_SPACY_MODEL, enable=["senter"])
+        nlp = spacy.load(_SPACY_MODEL)
         tokenizer = BertTokenizer.from_pretrained(args.bert_name, cache_dir=args.cache_dir)
 
     total_chunks = 0
