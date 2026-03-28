@@ -13,7 +13,11 @@ dependencies = [
     "transformers>=4.40",
     # NLP utilities
     "spacy>=3.7",
+    "scispacy>=0.5",
     "regex>=2024.1",
+    # Tokenizer dependencies (required by transformers for BioBERT)
+    "sentencepiece>=0.1.99",
+    "protobuf>=3.20",
     # Schema validation
     "pydantic>=2.6",
     # Scientific computing

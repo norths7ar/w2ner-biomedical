@@ -57,7 +57,10 @@ w2ner-biomedical/
 ├── scripts/
 │   ├── run_train.sh            # Steps 1→2→3→4→train.
 │   ├── run_predict.sh          # Steps 1→2→5→6 (no labels required).
-│   └── run_cv.sh               # K-fold loop over run_train.sh + run_predict.sh.
+│   ├── run_cv.sh               # K-fold loop over run_train.sh + run_predict.sh.
+│   ├── run_train.ps1           # PowerShell equivalent of run_train.sh.
+│   ├── run_predict.ps1         # PowerShell equivalent of run_predict.sh.
+│   └── run_cv.ps1              # PowerShell equivalent of run_cv.sh.
 ├── tests/
 │   └── test_roundtrip.py       # Encode→decode round-trip tests.
 ├── pyproject.toml              # pip install -e . for intra-package imports.
@@ -196,50 +199,168 @@ codebase. Each is tagged in the relevant file's header comment with its priority
 
 ## Running the pipeline
 
-Install the package first so that intra-package imports resolve correctly:
+Install the package and its dependencies:
 
 ```bash
 pip install -e .
 ```
 
-**Training** (steps 1 → 2 → 3 → 4 → train):
+**`en_core_sci_sm` (biomedical sentence model for step02) must be installed separately** — it is a model file distributed by the scispacy project, not a PyPI package, so it cannot be listed in `pyproject.toml`. Find the release matching your installed scispacy version at:
+
+> https://github.com/allenai/scispacy/releases
+
+Then install it directly, for example:
+
+```powershell
+pip install https://s3-us-west-2.amazonaws.com/ai2-s3-scispacy/releases/v0.5.4/en_core_sci_sm-0.5.4.tar.gz
+```
+
+Replace `v0.5.4` with the version that matches your `scispacy` install (`pip show scispacy` to check).
+
+### Input data layout
+
+The scripts accept a single JSON file (or a directory of JSON files) per split via `-InputDir` and `-ValDir`. Each split is processed through steps 1–3 into its own subdirectory under `-DataDir`. See the [Data storage and split identity](#data-storage-and-split-identity) section for the full folder layout.
+
+The converter outputs (`data/converted/biored/`) can be passed directly — no need to copy files into extra directories first.
+
+---
+
+### Training (steps 1 → 2 → 3 → 4 → train)
+
+**PowerShell (Windows):**
+
+```powershell
+.\scripts\run_train.ps1 `
+    -BertName    dmis-lab/biobert-base-cased-v1.1 `
+    -Config      configs/biored_base.json `
+    -Spec        specs/label_spec.json `
+    -ModelSuffix _biored `
+    -InputDir    data/raw/biored/train.json `
+    -ValDir      data/raw/biored/dev.json `
+    -DataDir     data/biored `
+    -OutputDir   models/biored_base
+```
+
+**Bash (Linux / macOS / WSL):**
 
 ```bash
 bash scripts/run_train.sh \
-  --bert-name  dmis-lab/biobert-base-cased-v1.1 \
-  --config     configs/biored_base.json \
-  --spec       specs/label_spec.json \
+  --bert-name    dmis-lab/biobert-base-cased-v1.1 \
+  --config       configs/biored_base.json \
+  --spec         specs/label_spec.json \
   --model-suffix _biored \
-  --input-dir  /path/to/train_annotations \
-  --val-dir    /path/to/val_annotations \
-  --output-dir models/biored_base
+  --input-dir    data/raw/biored/train.json \
+  --val-dir      data/raw/biored/dev.json \
+  --data-dir     data/biored \
+  --output-dir   models/biored_base
 ```
 
-**Inference** (steps 1 → 2 → 5 → 6, no gold labels required):
+Both splits are processed through steps 1–3 independently. Intermediate outputs land in `data/biored/train/` and `data/biored/val/`. The trained model is saved to `--output-dir`.
+
+---
+
+### Inference (steps 1 → 2 → 5 → 6, no gold labels required)
+
+**PowerShell:**
+
+```powershell
+.\scripts\run_predict.ps1 `
+    -BertName  dmis-lab/biobert-base-cased-v1.1 `
+    -Config    configs/biored_base.json `
+    -ModelDir  models/biored_base `
+    -InputDir  data/raw/biored_test `
+    -OutputDir data/predictions
+```
+
+**Bash:**
 
 ```bash
 bash scripts/run_predict.sh \
   --bert-name  dmis-lab/biobert-base-cased-v1.1 \
   --config     configs/biored_base.json \
   --model-dir  models/biored_base \
-  --input-dir  /path/to/documents \
+  --input-dir  data/raw/biored_test \
   --output-dir data/predictions
 ```
 
-**Cross-validation** (K-fold loop over train + predict):
+---
+
+### Cross-validation (K-fold loop over train + predict)
+
+CV split directories must be pre-built, one subdirectory per fold:
+
+```
+data/cv_splits/
+├── fold_0_train/   ← training annotations for fold 0
+├── fold_0_val/     ← validation annotations for fold 0
+├── fold_0_test/    ← held-out test annotations for fold 0
+├── fold_1_train/
+...
+```
+
+**PowerShell:**
+
+```powershell
+.\scripts\run_cv.ps1 `
+    -Folds       5 `
+    -BertName    dmis-lab/biobert-base-cased-v1.1 `
+    -Config      configs/biored_base.json `
+    -ModelSuffix _biored `
+    -CvDir       data/cv_splits `
+    -OutputDir   data/cv_results
+```
+
+**Bash:**
 
 ```bash
 bash scripts/run_cv.sh \
-  --folds       5 \
-  --bert-name   dmis-lab/biobert-base-cased-v1.1 \
-  --config      configs/biored_base.json \
+  --folds        5 \
+  --bert-name    dmis-lab/biobert-base-cased-v1.1 \
+  --config       configs/biored_base.json \
   --model-suffix _biored \
-  --cv-dir      /path/to/cv_splits \
-  --output-dir  data/cv_results
+  --cv-dir       data/cv_splits \
+  --output-dir   data/cv_results
 ```
 
-All scripts accept the same flags as environment variables
-(`BERT_NAME`, `CONFIG`, `MODEL_DIR`, etc.) so they compose cleanly in CI.
+Results for each fold are written to `data/cv_results/fold_N/model/` (weights) and `data/cv_results/fold_N/predictions/` (postprocessed spans).
+
+---
+
+### Reprocessing (--force / -Force)
+
+By default, each step skips files whose output already exists. Pass `--force` (bash) or `-Force` (PowerShell) to reprocess everything from scratch:
+
+```powershell
+.\scripts\run_train.ps1 -InputDir data/raw/biored_train -Force
+```
+
+---
+
+### PyTorch + CUDA setup (Windows)
+
+The default conda environment installs a CPU-only PyTorch. For GPU training, reinstall with a CUDA-enabled build. The RTX 5070 (Blackwell, sm_120) requires **PyTorch 2.7+** with **CUDA 12.8**:
+
+```powershell
+conda activate w2ner-biomedical
+pip uninstall torch -y
+pip install torch --index-url https://download.pytorch.org/whl/cu128
+```
+
+Verify:
+
+```powershell
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
+---
+
+### PowerShell execution policy
+
+If PowerShell blocks the scripts, allow local scripts for your user session:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
 
 ---
 
@@ -269,3 +390,86 @@ treated as a contiguous entity (all intermediate words included).
 
 Character offsets are absolute within the concatenated fulltext string
 (`title + " " + abstract` after NFKC unicode normalisation).
+
+---
+
+## Data storage and split identity
+
+### Folder layout
+
+The scripts enforce a fixed sub-structure inside whatever root you pass as `--data-dir` / `-DataDir`. Each split gets its own subdirectory, so you can always identify what is in a folder from its path alone.
+
+```
+data/
+├── raw/
+│   ├── biored/
+│   │   ├── train.json          ← converter output, one file per split
+│   │   ├── dev.json
+│   │   └── test.json
+│   └── bc5cdr/
+│       ├── train.json
+│       ├── dev.json
+│       └── test.json
+│
+├── biored/                     ← --data-dir data/biored
+│   ├── train/                  ← training split intermediates
+│   │   ├── step01_output/      ← IngestRecord JSONL
+│   │   ├── step02_output/      ← TokenRecord JSONL (tokenized)
+│   │   └── step03_output/      ← TokenRecord JSONL (with NER labels)
+│   └── val/                    ← validation split intermediates (same layout)
+│       ├── step01_output/
+│       ├── step02_output/
+│       └── step03_output/
+│
+└── bc5cdr/                     ← --data-dir data/bc5cdr
+    ├── train/
+    └── val/
+
+models/
+├── biored_base/                ← --output-dir models/biored_base
+│   ├── model.pt
+│   ├── label2id.json
+│   ├── label_spec.json         ← copy saved alongside model for step05
+│   └── logs/
+│       └── train.log
+└── bc5cdr_base/
+```
+
+Both train and val data are processed through steps 1–3 independently inside their respective subdirectories. `train.py` then receives:
+
+- `--input-dir data/biored/train/step03_output/`
+- `--val-dir   data/biored/val/step03_output/`
+
+This means the split identity is always recoverable from the filesystem path, not just from memory of how the scripts were invoked.
+
+### What the step manifest does NOT record
+
+Every JSONL output has a `.meta.json` sidecar (`StageManifest`) recording the stage name, input filenames, a SHA-256 input hash, a record count, and a timestamp. It is used for cache invalidation and cross-stage record-count auditing.
+
+The manifest does **not** record the dataset name (BioRED, BC5CDR, …) or the split role. That information is carried by the directory path.
+
+### Running multiple datasets without collision
+
+Pass a distinct `-DataDir` per dataset so intermediate outputs never overwrite each other:
+
+```powershell
+# BioRED
+.\scripts\run_train.ps1 `
+    -InputDir data/raw/biored/train.json `
+    -ValDir   data/raw/biored/dev.json `
+    -DataDir  data/biored `
+    -OutputDir models/biored_base `
+    -ModelSuffix _biored
+
+# BC5CDR
+.\scripts\run_train.ps1 `
+    -InputDir data/raw/bc5cdr/train.json `
+    -ValDir   data/raw/bc5cdr/dev.json `
+    -DataDir  data/bc5cdr `
+    -OutputDir models/bc5cdr_base `
+    -ModelSuffix _bc5cdr
+```
+
+### What is embedded in each record
+
+Individual `TokenRecord` objects carry a `pmid`, `document_id`, and a chunk `id` of the form `{pmid}_{sent_idx}_{chunk_idx}`. These trace any prediction back to its source document and sentence, but they do not encode split or dataset membership — that is the directory's job.
