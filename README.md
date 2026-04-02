@@ -24,36 +24,10 @@ in the preprocessing and orchestration layer.
 ## Directory structure
 
 ```
-w2ner-biomedical/
+w2ner-biomedical/               ← git repo root
 ├── configs/
 │   └── biored_base.json        # Architecture + optimiser hyperparameters only.
 │                               # Vocabulary (entity_types, label_num) is injected by step04.
-├── specs/
-│   ├── label_spec.json         # Authoritative entity type vocabulary. Edit deliberately.
-│   └── schemas.py              # Pydantic stage-boundary schemas (IngestRecord → PostprocessRecord).
-├── pipeline/
-│   ├── _utils.py               # Shared helpers: file_sha256, write_stage_manifest, build_base_parser.
-│   ├── step01_ingest.py        # Unicode normalise; emit IngestRecord JSONL.
-│   ├── step02_tokenize.py      # Sentence-split + word-tokenise + subword-chunk (merged).
-│   ├── step03_add_labels.py    # Align annotations to sentence chunks; populate ner field.
-│   ├── step04_finalize_config.py  # Validate vocabulary; write entity_types into config.
-│   ├── step05_predict.py       # Inference: encode + forward pass + decode_grid.
-│   └── step06_postprocess.py   # Char span recovery + majority-vote type normalisation.
-├── model/
-│   ├── constants.py            # Shared numeric constants: NNW_LABEL, CLS_OFFSET, DIST_DIAGONAL.
-│   ├── ner_model.py            # W2NER neural architecture.
-│   ├── trainer.py              # Training loop, loss, validation, early stopping.
-│   ├── decoding.py             # Grid → entity span decoder.
-│   └── train.py                # Training entry point.
-├── data/
-│   ├── feature_builder.py      # TokenRecord → model tensors.
-│   └── collate.py              # DataLoader collate function.
-├── guards/
-│   └── validators.py           # Five explicit pipeline guards.
-├── converters/
-│   ├── bc5cdr_to_schema.py     # BC5CDR BioC XML → annotation JSON.
-│   ├── biored_to_schema.py     # BioRED BioC XML → annotation JSON (incl. discontinuous).
-│   └── README.md               # Corpus format notes and usage examples.
 ├── scripts/
 │   ├── run_train.sh            # Steps 1→2→3→4→train.
 │   ├── run_predict.sh          # Steps 1→2→5→6 (no labels required).
@@ -61,10 +35,39 @@ w2ner-biomedical/
 │   ├── run_train.ps1           # PowerShell equivalent of run_train.sh.
 │   ├── run_predict.ps1         # PowerShell equivalent of run_predict.sh.
 │   └── run_cv.ps1              # PowerShell equivalent of run_cv.sh.
-├── tests/
-│   └── test_roundtrip.py       # Encode→decode round-trip tests.
 ├── pyproject.toml              # pip install -e . for intra-package imports.
-└── README.md
+├── README.md
+└── w2ner_biomedical/           ← Python package (import w2ner_biomedical.*)
+    ├── specs/
+    │   ├── label_spec.json     # Authoritative entity type vocabulary. Edit deliberately.
+    │   └── schemas.py          # Pydantic stage-boundary schemas (IngestRecord → PostprocessRecord).
+    ├── pipeline/
+    │   ├── _utils.py           # Shared helpers: file_sha256, write_stage_manifest, build_base_parser.
+    │   ├── step01_ingest.py    # Unicode normalise; emit IngestRecord JSONL.
+    │   ├── step02_tokenize.py  # Sentence-split + word-tokenise + subword-chunk (merged).
+    │   ├── step03_add_labels.py   # Align annotations to sentence chunks; populate ner field.
+    │   ├── step04_finalize_config.py  # Validate vocabulary; write entity_types into config.
+    │   ├── step05_predict.py   # Inference: encode + forward pass + decode_grid.
+    │   └── step06_postprocess.py  # Char span recovery + majority-vote type normalisation.
+    ├── model/
+    │   ├── constants.py        # Shared numeric constants: NNW_LABEL, CLS_OFFSET, DIST_DIAGONAL.
+    │   ├── ner_model.py        # W2NER neural architecture.
+    │   ├── trainer.py          # Training loop, loss, validation, early stopping.
+    │   ├── decoding.py         # Grid → entity span decoder.
+    │   └── train.py            # Training entry point.
+    ├── data/
+    │   ├── feature_builder.py  # TokenRecord → model tensors.
+    │   └── collate.py          # DataLoader collate function.
+    ├── guards/
+    │   └── validators.py       # Five explicit pipeline guards.
+    ├── converters/
+    │   ├── bc5cdr_to_schema.py # BC5CDR BioC XML → annotation JSON.
+    │   ├── biored_to_schema.py # BioRED BioC XML → annotation JSON (incl. discontinuous).
+    │   └── README.md           # Corpus format notes and usage examples.
+    ├── tools/
+    │   └── evaluate.py         # Entity-level P/R/F1 evaluation (step06 output vs. gold JSON).
+    └── tests/
+        └── test_roundtrip.py   # Encode→decode round-trip tests.
 ```
 
 ---
@@ -409,7 +412,9 @@ Character offsets are absolute within the concatenated fulltext string
 
 ### Folder layout
 
-The scripts enforce a fixed sub-structure inside whatever root you pass as `--data-dir` / `-DataDir`. Each split gets its own subdirectory, so you can always identify what is in a folder from its path alone.
+The orchestration scripts (`run_train.ps1` / `run_train.sh`) enforce a fixed sub-structure inside whatever root you pass as `-DataDir` / `--data-dir`. Each split gets its own subdirectory, so you can always identify what is in a folder from its path alone.
+
+> **Note:** The individual step scripts (`step01_ingest.py`, etc.) write to wherever you point `--output-dir`. The directory layout below is only enforced when running through the orchestration scripts. If you invoke steps manually, you are responsible for keeping the paths consistent.
 
 ```
 data/
