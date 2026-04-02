@@ -63,7 +63,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from myutils import load_json, load_jsonl, save_jsonl, get_logger
+from myutils import load_json, load_jsonl, save_jsonl, get_logger, set_output_dir
 
 from ..specs.schemas import TokenRecord, NEREntry, SubSpan, LabelSpec
 from ..guards.validators import check_entity_alignment_rate, check_record_count_parity
@@ -352,8 +352,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = set_output_dir(Path(args.output_dir))
     LOGGER = get_logger("step03_add_labels", log_dir=output_dir / "logs")
 
     spec = LabelSpec.model_validate(load_json(Path(args.spec)))

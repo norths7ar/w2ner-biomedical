@@ -13,8 +13,7 @@
 # KEY DESIGN CHANGES (ARCHITECTURE)
 #   - Sentence splitter: spaCy's statistical senter component replaces the
 #     LitcoinSentenceTokenizer (which was a company-internal dependency).
-#     The senter is loaded via en_core_sci_sm with only ["senter"] enabled
-#     so no tagger, parser, or NER overhead is incurred.
+#     The senter is loaded via en_core_sci_sm.
 #
 #   - Single-pass chunking replaces the original two-pass approach:
 #     step03 used a heuristic "-6 buffer" for rough chunking; step04 re-
@@ -56,7 +55,7 @@ from pathlib import Path
 
 import regex
 
-from myutils import load_jsonl, save_jsonl, get_logger
+from myutils import load_json, load_jsonl, save_jsonl, get_logger, set_output_dir
 
 from ..specs.schemas import IngestRecord, TokenRecord
 from ..guards.validators import check_record_count_parity
@@ -282,7 +281,7 @@ def tokenize_document(
             # split_punct yields fulltext-absolute (start, end) because
             # token.idx is already relative to the full doc string.
             for word, start, end in split_punct(token.text, token.idx):
-                words.append("LONG_WORD" if len(word) > 500 else word)
+                words.append("LONG_WORD" if len(word) > max_length else word)
                 word_spans.append((start, end))
 
         if not words:
@@ -325,23 +324,20 @@ def _process_file(
 
     Returns the number of TokenRecords written, or -1 if skipped.
     """
-    import hashlib
-
     output_path = output_dir / f"{input_path.stem}.jsonl"
 
     if output_path.exists() and not force:
         LOGGER.info("Skipping %s (output exists; use --force to overwrite)", input_path.stem)
         return -1
 
-    ingest_records = list(load_jsonl(input_path))
+    ingest_records: list = load_jsonl(input_path)
     LOGGER.info("Processing %s: %d documents", input_path.name, len(ingest_records))
 
     # Load step01 manifest for record count parity check
     step01_manifest_path = input_path.with_suffix(input_path.suffix + ".meta.json")
     prev_count: int | None = None
     if step01_manifest_path.exists():
-        import json
-        prev_data = json.loads(step01_manifest_path.read_text(encoding="utf-8"))
+        prev_data: dict = load_json(step01_manifest_path)
         prev_count = prev_data.get("record_count")
 
     if workers > 1:
@@ -425,8 +421,7 @@ def main() -> None:
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = set_output_dir(Path(args.output_dir))
 
     LOGGER = get_logger("step02_tokenize", log_dir=output_dir / "logs")
     os.environ["TOKENIZERS_PARALLELISM"] = "false"

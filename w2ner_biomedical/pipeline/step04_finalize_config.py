@@ -56,7 +56,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from myutils import load_json, load_jsonl, get_logger
+from myutils import load_json, load_jsonl, get_logger, set_output_dir
 
 from ..specs.schemas import LabelSpec
 from ..guards.validators import check_type_vocabulary_consistency
@@ -206,7 +206,7 @@ def finalize_config(
     if output_path is None:
         output_path = config_path
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    set_output_dir(output_path.parent)
     tmp_fd, tmp_path_str = tempfile.mkstemp(dir=output_path.parent, suffix=".json.tmp")
     try:
         os.close(tmp_fd)

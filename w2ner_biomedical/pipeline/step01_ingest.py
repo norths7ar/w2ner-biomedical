@@ -47,7 +47,7 @@ import unicodedata
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-from myutils import load_json, save_jsonl, get_logger
+from myutils import load_json, save_jsonl, get_logger, set_output_dir
 
 from ..specs.schemas import IngestRecord
 from ..guards.validators import check_record_count_parity
@@ -252,8 +252,7 @@ def main() -> None:
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = set_output_dir(Path(args.output_dir))
 
     LOGGER = get_logger("step01_ingest", log_dir=output_dir / "logs")
 
